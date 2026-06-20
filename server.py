@@ -1,26 +1,34 @@
 import asyncio
 import json
 from login import handle_login
-# Importa tus otros módulos aquí
 
 async def handle_client(reader, writer):
-    data = await reader.read(1024)
-    message = json.loads(data.decode())
+    # Obtener IP del cliente para logs
+    addr = writer.get_extra_info('peername')
+    ip = addr[0] if addr else "Desconocida"
+    print(f"Client {ip} connected")
     
-    # El APK suele enviar el nombre de la función en un campo llamado 'type' o 'cmd'
-    cmd = message.get("type")
-    
-    # Dispatcher simple
-    if cmd == "login":
-        response = await handle_login(message)
-    elif cmd == "gs_get_friends":
-        response = {"status": "success", "friends": []} # Lógica de social.py
-    else:
-        response = {"status": "error", "message": "Unknown command"}
-    
-    writer.write(json.dumps(response).encode())
-    await writer.drain()
-    writer.close()
+    try:
+        data = await reader.read(2048) # Buffer amplio para las peticiones
+        if not data: return
+            
+        message = json.loads(data.decode())
+        cmd = message.get("type")
+        
+        # Enrutador simple (Dispatcher)
+        if cmd == "login":
+            response = handle_login(message, ip)
+        else:
+            # Aquí conectarás tus funciones de logic/ (breeding.py, etc.)
+            response = {"status": "error", "message": "Comando no implementado"}
+        
+        writer.write(json.dumps(response).encode())
+        await writer.drain()
+    except Exception as e:
+        print(f"Error con cliente {ip}: {e}")
+    finally:
+        writer.close()
+        await writer.wait_closed()
 
 async def main():
     server = await asyncio.start_server(handle_client, '0.0.0.0', 9933)
