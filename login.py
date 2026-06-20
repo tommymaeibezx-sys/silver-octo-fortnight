@@ -1,22 +1,25 @@
 import uuid
-import random
-
-# Simulador de persistencia de conteo (deberías leer esto de tu DB)
-last_player_num = 0
+from tools.database import get_db
 
 def handle_login(data, ip):
-    global last_player_num
-    last_player_num += 1
+    db = get_db()
+    cursor = db.cursor()
     
-    player_data = {
-        "username": f"NewPlayer{last_player_num}",
-        "user_id": int(uuid.uuid4().int >> 96), # ID único de 64 bits
-        "ip_last_seen": ip
-    }
+    # 1. Intentar buscar usuario (ejemplo por nombre de usuario recibido)
+    username = data.get("username", "Guest")
+    cursor.execute("SELECT * FROM players WHERE username = ?", (username,))
+    user = cursor.fetchone()
     
-    print(f"Login exitoso: {player_data['username']} (ID: {player_data['user_id']}) desde {ip}")
-    
-    return {
-        "status": "success",
-        "user_info": player_data
-    }
+    if user:
+        print(f"Login existente: {username} (ID: {user['user_id']})")
+        return {"status": "success", "user_id": user['user_id']}
+    else:
+        # 2. Si no existe, crear usuario nuevo
+        new_id = int(uuid.uuid4().int >> 96)
+        cursor.execute(
+            "INSERT INTO players (user_id, username, ip_last_seen) VALUES (?, ?, ?)",
+            (new_id, f"NewPlayer_{new_id}", ip)
+        )
+        db.commit()
+        print(f"Nuevo usuario registrado: {username} con ID {new_id} desde {ip}")
+        return {"status": "success", "user_id": new_id, "message": "Account created"}
